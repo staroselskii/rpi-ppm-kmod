@@ -1,29 +1,11 @@
 # Object files
 *.o
+
+#kernel specific
 *.ko
-*.obj
-*.elf
+*.cmd
+*.symvers
+*.order
+*.mod.*
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+.tmp_versions/
