@@ -2,6 +2,7 @@
 #include <linux/kernel.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h> 
+#include <linux/time.h>
 #include <asm/io.h>
 
 #include "rpi.h"
@@ -41,15 +42,27 @@ static inline void gpio_set_output(uint32_t pin)
 /*
  * The interrupt service routine called on button presses
  */
+
+struct timeval t;
+
+static long int last_timestamp;
+static long int dt;
+
 static irqreturn_t button_isr(int irq, void *data)
 {
 	if(irq == button_irqs[0]) {
+        do_gettimeofday(&t);
+
+        dt = (t.tv_sec * 1000000ul + t.tv_usec) - last_timestamp;
+
+#if 0
         int value = gpio_read(24);
 		if (value == 1) {
             gpio_clear(24);
         } else {
             gpio_set(24);
         }
+#endif
 
 	}
 
@@ -64,6 +77,10 @@ static int __init ppm_init(void)
 	int ret = 0;
 
 	printk(KERN_INFO "%s\n", __func__);
+    do_gettimeofday(&t);
+
+    last_timestamp = t.tv_sec * 1000000ul + t.tv_usec;
+
 
     gpio.map     = ioremap(GPIO_BASE, 4096);//p->map;
 	gpio.addr    = (volatile unsigned int *)gpio.map;
