@@ -3,6 +3,10 @@
 #include <linux/gpio.h>
 #include <linux/interrupt.h> 
 #include <linux/time.h>
+#include <linux/kthread.h>
+#include <linux/sched.h> 
+#include <linux/delay.h>
+
 #include <asm/io.h>
 
 #include "rpi.h"
@@ -45,15 +49,27 @@ static inline void gpio_set_output(uint32_t pin)
 
 struct timeval t;
 
-static long int last_timestamp;
-static long int dt;
+static long long int last_timestamp;
+static long long int dt;
+static struct task_struct *worker;
+
+static int worker_task() 
+{
+    while (true) {
+        mdelay(10);
+        printk(KERN_INFO "%ld\n", jiffies * 1000 / HZ);
+
+        if (kthread_should_stop()) {
+            return 0;
+        }
+    }
+
+    return 0;
+}
 
 static irqreturn_t button_isr(int irq, void *data)
 {
 	if(irq == button_irqs[0]) {
-        do_gettimeofday(&t);
-
-        dt = (t.tv_sec * 1000000ul + t.tv_usec) - last_timestamp;
 
 #if 0
         int value = gpio_read(24);
@@ -81,11 +97,8 @@ static int __init ppm_init(void)
 
     last_timestamp = t.tv_sec * 1000000ul + t.tv_usec;
 
-
     gpio.map     = ioremap(GPIO_BASE, 4096);//p->map;
 	gpio.addr    = (volatile unsigned int *)gpio.map;
-
-    printk(KERN_INFO "%p %p\n", gpio.map, gpio.addr);
 
     gpio_set_input(PPM_PIN);	
 
@@ -128,6 +141,7 @@ static int __init ppm_init(void)
 		goto fail2;
 	}
 
+    worker = kthread_run(worker_task, NULL, "ppm_worker");
 
 	return 0;
 
@@ -147,8 +161,6 @@ fail1:
  */
 static void __exit ppm_exit(void)
 {
-	int i;
-
 	printk(KERN_INFO "%s\n", __func__);
 
 	free_irq(button_irqs[0], NULL);
@@ -163,6 +175,11 @@ static void __exit ppm_exit(void)
         /* release the mapping */
         iounmap(gpio.addr);
 	}
+
+    int ret = kthread_stop(worker);
+
+    if(!ret)
+        printk(KERN_INFO "worker stopped");
 }
 
 MODULE_LICENSE("GPL");
