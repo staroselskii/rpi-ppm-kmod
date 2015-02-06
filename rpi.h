@@ -12,7 +12,6 @@
  
 #define GPIO_READ(g)  *(gpio.addr + 13) & (1<<(g))
 
-// IO Acces
 struct bcm2835_peripheral {
     unsigned long addr_p;
     int mem_fd;
