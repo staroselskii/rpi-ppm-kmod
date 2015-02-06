@@ -49,15 +49,15 @@ static inline void gpio_set_output(uint32_t pin)
 
 struct timeval t;
 
-static long long int last_timestamp;
-static long long int dt;
+static long int last_timestamp;
+static long int dt;
 static struct task_struct *worker;
 
 static int worker_task() 
 {
     while (true) {
-        mdelay(10);
-        printk(KERN_INFO "%ld\n", jiffies * 1000 / HZ);
+        mdelay(100);
+        printk(KERN_INFO "%ld\n", dt * 1000 / HZ);
 
         if (kthread_should_stop()) {
             return 0;
@@ -69,20 +69,20 @@ static int worker_task()
 
 static irqreturn_t button_isr(int irq, void *data)
 {
-	if(irq == button_irqs[0]) {
+    if(irq == button_irqs[0]) {
 
 #if 0
         int value = gpio_read(24);
-		if (value == 1) {
+        if (value == 1) {
             gpio_clear(24);
         } else {
             gpio_set(24);
         }
 #endif
 
-	}
+    }
 
-	return IRQ_HANDLED;
+    return IRQ_HANDLED;
 }
 
 /*
@@ -90,70 +90,69 @@ static irqreturn_t button_isr(int irq, void *data)
  */
 static int __init ppm_init(void)
 {
-	int ret = 0;
+    int ret = 0;
 
-	printk(KERN_INFO "%s\n", __func__);
-    do_gettimeofday(&t);
+    printk(KERN_INFO "%s\n", __func__);
 
-    last_timestamp = t.tv_sec * 1000000ul + t.tv_usec;
+    last_timestamp = jiffies;
 
     gpio.map     = ioremap(GPIO_BASE, 4096);//p->map;
-	gpio.addr    = (volatile unsigned int *)gpio.map;
+    gpio.addr    = (volatile unsigned int *)gpio.map;
 
-    gpio_set_input(PPM_PIN);	
+    gpio_set_input(PPM_PIN);
 
-	gpio_set_input(TEST_PIN);
-	gpio_set_output(TEST_PIN);
-        
-	// register LED gpios
-	ret = gpio_request(TEST_PIN, "PIN TEST" );
+    gpio_set_input(TEST_PIN);
+    gpio_set_output(TEST_PIN);
 
-	if (ret) {
-		printk(KERN_ERR "Unable to request GPIOs for LEDs: %d\n", ret);
-		return ret;
-	}
-	
-	// register BUTTON gpios
-	ret = gpio_request(PPM_PIN, "PPM PIN");
+    // register LED gpios
+    ret = gpio_request(TEST_PIN, "PIN TEST" );
 
-	if (ret) {
-		printk(KERN_ERR "Unable to request GPIOs for PPM: %d\n", ret);
-		goto fail1;
-	}
+    if (ret) {
+        printk(KERN_ERR "Unable to request GPIOs for LEDs: %d\n", ret);
+        return ret;
+    }
 
-	printk(KERN_INFO "Current PPM value: %d\n", GPIO_READ(PPM_PIN) ? 1: 0);
-	
-	ret = gpio_to_irq(PPM_PIN);
+    // register BUTTON gpios
+    ret = gpio_request(PPM_PIN, "PPM PIN");
 
-	if(ret < 0) {
-		printk(KERN_ERR "Unable to request IRQ: %d\n", ret);
-		goto fail2;
-	}
+    if (ret) {
+        printk(KERN_ERR "Unable to request GPIOs for PPM: %d\n", ret);
+        goto fail1;
+    }
 
-	button_irqs[0] = ret;
+    printk(KERN_INFO "Current PPM value: %d\n", GPIO_READ(PPM_PIN) ? 1: 0);
 
-	printk(KERN_INFO "Successfully requested PPM PIN4 IRQ # %d\n", button_irqs[0]);
+    ret = gpio_to_irq(PPM_PIN);
 
-	ret = request_irq(button_irqs[0], button_isr, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "ppm#pin4", NULL);
+    if(ret < 0) {
+        printk(KERN_ERR "Unable to request IRQ: %d\n", ret);
+        goto fail2;
+    }
 
-	if(ret) {
-		printk(KERN_ERR "Unable to request IRQ: %d\n", ret);
-		goto fail2;
-	}
+    button_irqs[0] = ret;
+
+    printk(KERN_INFO "Successfully requested PPM PIN4 IRQ # %d\n", button_irqs[0]);
+
+    ret = request_irq(button_irqs[0], button_isr, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "ppm#pin4", NULL);
+
+    if(ret) {
+        printk(KERN_ERR "Unable to request IRQ: %d\n", ret);
+        goto fail2;
+    }
 
     worker = kthread_run(worker_task, NULL, "ppm_worker");
 
-	return 0;
+    return 0;
 
 // cleanup what has been setup so far
 
 fail2: 
-	gpio_free(PPM_PIN);
+    gpio_free(PPM_PIN);
 
 fail1:
-	gpio_free(TEST_PIN);
+    gpio_free(TEST_PIN);
 
-	return ret;	
+    return ret;    
 }
 
 /**
@@ -161,20 +160,20 @@ fail1:
  */
 static void __exit ppm_exit(void)
 {
-	printk(KERN_INFO "%s\n", __func__);
+    printk(KERN_INFO "%s\n", __func__);
 
-	free_irq(button_irqs[0], NULL);
-	
+    free_irq(button_irqs[0], NULL);
+
     /* Clear pin */
     gpio_clear(TEST_PIN);
 
-	gpio_free(TEST_PIN);
-	gpio_free(PPM_PIN);
+    gpio_free(TEST_PIN);
+    gpio_free(PPM_PIN);
 
     if (gpio.addr){
         /* release the mapping */
         iounmap(gpio.addr);
-	}
+    }
 
     int ret = kthread_stop(worker);
 
