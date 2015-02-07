@@ -53,11 +53,11 @@ static long int last_timestamp;
 static long int dt;
 static struct task_struct *worker;
 
-static int worker_task() 
+static int worker_task(void* arg) 
 {
     while (true) {
-        mdelay(100);
-        printk(KERN_INFO "%ld\n", dt * 1000 / HZ);
+        msleep(1000);
+        printk(KERN_INFO "%ld\n", dt);
 
         if (kthread_should_stop()) {
             return 0;
@@ -69,7 +69,17 @@ static int worker_task()
 
 static irqreturn_t button_isr(int irq, void *data)
 {
+    unsigned int timestamp;
+
     if(irq == button_irqs[0]) {
+
+        timestamp = jiffies_to_usecs(jiffies);
+
+        if (timestamp - last_timestamp < 20000) {
+            dt = timestamp - last_timestamp;
+        }
+
+        last_timestamp = timestamp;
 
 #if 0
         int value = gpio_read(24);
@@ -94,7 +104,7 @@ static int __init ppm_init(void)
 
     printk(KERN_INFO "%s\n", __func__);
 
-    last_timestamp = jiffies;
+    last_timestamp = jiffies_to_usecs(jiffies);
 
     gpio.map     = ioremap(GPIO_BASE, 4096);//p->map;
     gpio.addr    = (volatile unsigned int *)gpio.map;
@@ -160,6 +170,8 @@ fail1:
  */
 static void __exit ppm_exit(void)
 {
+    int rc;
+
     printk(KERN_INFO "%s\n", __func__);
 
     free_irq(button_irqs[0], NULL);
@@ -175,10 +187,11 @@ static void __exit ppm_exit(void)
         iounmap(gpio.addr);
     }
 
-    int ret = kthread_stop(worker);
+    rc = kthread_stop(worker);
 
-    if(!ret)
+    if (rc == 0) {
         printk(KERN_INFO "worker stopped");
+    }
 }
 
 MODULE_LICENSE("GPL");
