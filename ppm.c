@@ -50,7 +50,7 @@ static inline void gpio_set_output(uint32_t pin)
 struct timeval t;
 
 static volatile long long int last_timestamp;
-static volatile long long int dt;
+static volatile long long int dt, dt2;
 static struct task_struct *worker;
 static volatile long long int mark;
 
@@ -58,7 +58,7 @@ static int worker_task(void* arg)
 {
     while (true) {
         msleep(10);
-        printk(KERN_INFO "%lld\n", dt);
+        printk(KERN_INFO "%lld %lld %lld\n", dt, dt2, dt + dt2);
 
         if (kthread_should_stop()) {
             return 0;
@@ -76,7 +76,12 @@ static irqreturn_t button_isr(int irq, void *data)
 
     if(irq == button_irqs[0]) {
 
-        dt = TIMER_GET - last_timestamp;
+        frame = !frame;
+
+        if (frame)
+            dt = TIMER_GET - last_timestamp;
+        else
+            dt2 = TIMER_GET - last_timestamp;
 
         last_timestamp = TIMER_GET;
 
