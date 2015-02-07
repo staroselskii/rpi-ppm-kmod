@@ -49,15 +49,16 @@ static inline void gpio_set_output(uint32_t pin)
 
 struct timeval t;
 
-static long int last_timestamp;
-static long int dt;
+static volatile long long int last_timestamp;
+static volatile long long int dt;
 static struct task_struct *worker;
+static volatile long long int mark;
 
 static int worker_task(void* arg) 
 {
     while (true) {
-        msleep(1000);
-        printk(KERN_INFO "%ld\n", dt);
+        msleep(10);
+        printk(KERN_INFO "%lld\n", dt);
 
         if (kthread_should_stop()) {
             return 0;
@@ -67,19 +68,17 @@ static int worker_task(void* arg)
     return 0;
 }
 
+bool frame; 
+
 static irqreturn_t button_isr(int irq, void *data)
 {
     unsigned int timestamp;
 
     if(irq == button_irqs[0]) {
 
-        timestamp = jiffies_to_usecs(jiffies);
+        dt = TIMER_GET - last_timestamp;
 
-        if (timestamp - last_timestamp < 20000) {
-            dt = timestamp - last_timestamp;
-        }
-
-        last_timestamp = timestamp;
+        last_timestamp = TIMER_GET;
 
 #if 0
         int value = gpio_read(24);
@@ -101,6 +100,8 @@ static irqreturn_t button_isr(int irq, void *data)
 static int __init ppm_init(void)
 {
     int ret = 0;
+    frame = false;
+
 
     printk(KERN_INFO "%s\n", __func__);
 
@@ -108,6 +109,9 @@ static int __init ppm_init(void)
 
     gpio.map     = ioremap(GPIO_BASE, 4096);//p->map;
     gpio.addr    = (volatile unsigned int *)gpio.map;
+
+    timer.map = ioremap(TIMER_BASE, 4096);
+    timer.addr = (volatile unsigned int *) timer.map;
 
     gpio_set_input(PPM_PIN);
 
@@ -141,12 +145,10 @@ static int __init ppm_init(void)
 
     button_irqs[0] = ret;
 
-    printk(KERN_INFO "Successfully requested PPM PIN4 IRQ # %d\n", button_irqs[0]);
-
     ret = request_irq(button_irqs[0], button_isr, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "ppm#pin4", NULL);
 
-    if(ret) {
-        printk(KERN_ERR "Unable to request IRQ: %d\n", ret);
+    if (ret) {
+        printk(KERN_ERR "ppm: can't get assigned irq %d\n", ret);
         goto fail2;
     }
 
@@ -185,6 +187,10 @@ static void __exit ppm_exit(void)
     if (gpio.addr){
         /* release the mapping */
         iounmap(gpio.addr);
+    }
+
+    if (timer.addr) {
+        iounmap(timer.addr);
     }
 
     rc = kthread_stop(worker);
